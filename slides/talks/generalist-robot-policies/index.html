@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generalist Robot Policies</title>
+  <link rel="stylesheet" href="../../vendor/reveal/reset.css">
+  <link rel="stylesheet" href="../../vendor/reveal/reveal.css">
+  <link rel="stylesheet" href="../../vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="../../shared/deck.css">
+  <script src="../../vendor/katex/katex.min.js"></script>
+  <script src="../../vendor/katex/contrib/auto-render.min.js"></script>
+  <script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js" } }</script>
+  <style>
+    /* from the lecture decks, for the slides reused from them */
+    .pichain [data-pi] { padding:0.1em 0.7em; border-radius:10px; border:2px solid transparent; transition:background 0.15s, border-color 0.15s; }
+    .pichain [data-pi].on { border-color:var(--accent); background:rgba(242,177,52,0.14); }
+    .photos { display:grid; grid-template-columns: repeat(3, 1fr); gap:0.6em; margin-top:0.3em; }
+    .photos img { width:100%; border-radius:8px; margin:0; display:block; }
+    .photos figcaption { font-size:0.6em; color: var(--fg-dim); margin-top:0.25em; }
+    .photos figure { margin:0; }
+    /* this deck */
+    .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:0.8em; }
+    .tile { text-align:center; padding:0.7em 0.8em 0.6em; }
+    .tile .big { font-size:2.5em; font-weight:700; color:var(--accent); line-height:1.1; font-variant-numeric:tabular-nums; }
+    .tile .what { font-size:0.78em; margin-top:0.25em; line-height:1.3; }
+    .tile .src { font-size:0.52em; color:var(--fg-dim); margin-top:0.5em; }
+    .src-tag { font-size:0.42em; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; vertical-align:middle; color:var(--bg); background:var(--blue); border-radius:6px; padding:0.2em 0.55em; margin-left:0.6em; }
+    .status { display:inline-block; font-size:0.62em; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; padding:0.12em 0.55em; border-radius:6px; color:var(--bg); background:var(--green); vertical-align:middle; margin-bottom:0.5em; }
+    .status.next { background:var(--accent); }
+    .tiles.side { grid-template-columns:1fr; gap:0.5em; align-content:space-between; }
+    .tiles.side .tile { display:grid; grid-template-columns:220px 1fr; gap:0.7em; align-items:center; text-align:left; padding:0.55em 0.8em; }
+    .tiles.side .big { font-size:1.5em; text-align:right; }
+    .tiles.side .what { font-size:0.62em; margin-top:0; }
+    .tiles.side .src { margin-top:0.3em; }
+    .numbox { display:grid; grid-template-columns:auto 1fr; gap:0.7em; align-items:start; }
+    .numbox .n { font-family:var(--mono); font-weight:700; color:var(--accent); font-size:1.2em; line-height:1.2; }
+    .grow h3 { margin-bottom:0.3em; }
+    .grow-row { display:grid; grid-template-columns:3.2em minmax(0, 7.2em) auto; justify-content:start; align-items:center; gap:0.45em; margin:0.25em 0; }
+    .grow-row .big { font-size:1.9em; font-weight:700; color:var(--accent); line-height:1.1; text-align:right; font-variant-numeric:tabular-nums; }
+    .grow-row .lbl { font-size:0.8em; color:var(--fg-dim); }
+    .grow-row svg { display:block; height:40px; }
+    .path { display:flex; align-items:center; gap:0.5em; flex-wrap:nowrap; }
+    .path .stop { border:2px solid var(--line); border-radius:8px; padding:0.35em 0.6em; background:var(--bg-2); text-align:center; line-height:1.25; }
+    .path .stop.key { border-color:var(--accent); }
+    .path .arr { color:var(--fg-dim); font-size:1.3em; }
+    .pipeline { display:grid; grid-template-columns:auto auto auto auto auto; gap:0 20px; justify-content:center; align-items:start; margin-top:0.3em; }
+    .pipeline h3 { text-align:center; margin-bottom:0.3em; }
+    .pipeline .stage { height:470px; display:flex; flex-direction:column; justify-content:center; align-items:center; }
+    .pipeline .arr { color:var(--fg-dim); font-size:2em; }
+  </style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ============================================================ -->
+<section class="title-slide">
+  <h1>Generalist Robot Policies</h1>
+  <p class="subtitle">Mateusz Wyszyński · University of Warsaw · Nomagic · November 2026</p>
+</section>
+
+<section>
+  <h2>Overview</h2>
+  <div class="cols" style="grid-template-columns:repeat(3,1fr); gap:0.9em; font-size:0.78em; margin-top:0.4em">
+    <div class="box" style="position:relative"><h3>1 · large behavioural models</h3><p class="small" style="font-size:0.8em; margin:0">what they are, how we train them</p><div class="sel fragment fade-out" data-fragment-index="1"></div></div>
+    <div class="box" style="position:relative"><h3>2 · research</h3><p class="small" style="font-size:0.8em; margin:0">the bet, work so far, outlook</p><div class="sel fragment fade-in-then-out" data-fragment-index="1"></div></div>
+    <div class="box" style="position:relative"><h3>3 · teaching &amp; other activities</h3><p class="small" style="font-size:0.8em; margin:0">interactive lecture materials, the lab</p><div class="sel fragment fade-in" data-fragment-index="2"></div></div>
+  </div>
+  <!-- walkthrough: the three states share one grid cell; each state = a frame around its block + a picture.
+       The first picture is not a fragment (reveal only autoplays a video in a fragment once that fragment is shown);
+       the second and third are opaque and cover it. -->
+  <div style="display:grid; justify-items:center; align-items:start; margin-top:0.9em">
+    <div style="grid-area:1/1; height:490px; display:flex; flex-direction:column; justify-content:center; align-items:flex-end; gap:6px">
+      <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/pi07-tasks-poster.jpg" aria-label="Physical Intelligence π0.7: a robot assembles a pinwheel and takes out the trash" style="width:800px; height:450px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/pi07-tasks.mp4" type="video/mp4"></video>
+      <span style="font-size:0.45em; color:var(--fg-dim)">Physical Intelligence, π0.7 (2026)</span>
+    </div>
+    <div class="fragment fade-in-then-out" data-fragment-index="1" style="grid-area:1/1; width:100%; height:490px; background:var(--bg); display:flex; flex-direction:column; gap:18px; justify-content:center; align-items:center">
+      <p style="margin:0; font-size:1.15em; text-align:center"><b>Internet-scale data for robotics</b>, from robots already at work</p>
+      <div style="display:flex; gap:16px; justify-content:center; align-items:center">
+        <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/vla-in-production-poster.jpg" aria-label="A robot arm picking items out of a bin in a production cell" style="width:560px; height:350px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/vla-in-production.mp4" type="video/mp4"></video>
+        <div style="display:grid; gap:16px">
+          <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/lab-polybags-poster.jpg" aria-label="Two robot arms in the lab handling a polybag, seen from above" style="width:280px; height:175px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/lab-polybags.mp4" type="video/mp4"></video>
+          <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/lab-shoe-poster.jpg" aria-label="Two robot arms in the lab taking a shoe out of its box, seen from above" style="width:280px; height:158px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/lab-shoe.mp4" type="video/mp4"></video>
+        </div>
+        <!-- the numbers of "The bet" slide -->
+        <div class="tiles" style="grid-template-columns:1fr; gap:12px; width:330px; height:350px; align-content:space-between">
+          <div class="box tile" style="padding:0.35em 0.6em"><div class="big" style="font-size:1.4em">1M+</div><div class="what" style="font-size:0.55em; margin-top:0.1em">real-robot trajectories across 22 robot embodiments</div></div>
+          <div class="box tile" style="padding:0.35em 0.6em"><div class="big" style="font-size:1.4em">5M</div><div class="what" style="font-size:0.55em; margin-top:0.1em">industrial robots operating worldwide</div></div>
+          <div class="box tile" style="padding:0.35em 0.6em"><div class="big" style="font-size:1.4em">200,000+</div><div class="what" style="font-size:0.55em; margin-top:0.1em">hours of operation and over 1 billion images, recorded by a single company</div></div>
+        </div>
+    
+      </div>
+    </div>
+    <div class="fragment fade-in" data-fragment-index="2" style="grid-area:1/1; width:100%; height:490px; background:var(--bg); display:flex; flex-direction:column; gap:14px; justify-content:center; align-items:center">
+      <p style="margin:0; font-size:1.15em; text-align:center"><b>Publishing teaching materials</b></p>
+      <div style="display:grid; grid-template-columns:auto auto; gap:12px 21px; justify-content:center">
+        <div data-widget="gauss1d" data-config='{"width":534,"height":150,"controls":"overlay","t":0,"print_t":1}'></div>
+        <div data-widget="melt" data-config='{"panel":"ice","width":534,"height":150,"controls":"overlay","t":0,"print_t":0.6}'></div>
+        <div data-widget="melt" data-config='{"panel":"density","width":900,"height":255,"samples":200,"controls":"overlay","t":0,"print_t":0.6}' style="grid-column:1 / -1; justify-self:center; width:900px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 1</div>
+  <h1>Large behavioural models</h1>
+</section>
+
+<section>
+  <h2>Large behavioural models: one policy for many tasks</h2>
+  <svg viewBox="0 0 1200 170" style="width:1060px; max-width:100%; display:block; margin:0 auto" font-family="Inter, Arial, sans-serif">
+    <defs><marker id="lbm-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs>
+    <rect x="20" y="6" width="260" height="46" rx="9" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/><text x="150" y="36" fill="#e7e9ee" font-size="19" font-weight="600" text-anchor="middle">camera images</text>
+    <rect x="20" y="62" width="260" height="46" rx="9" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/><text x="150" y="92" fill="#e7e9ee" font-size="19" font-weight="600" text-anchor="middle">language instruction</text>
+    <rect x="20" y="118" width="260" height="46" rx="9" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/><text x="150" y="148" fill="#e7e9ee" font-size="19" font-weight="600" text-anchor="middle">robot state</text>
+    <line x1="286" y1="29" x2="364" y2="29" stroke="#9aa1ae" stroke-width="2" marker-end="url(#lbm-a)"/>
+    <line x1="286" y1="85" x2="364" y2="85" stroke="#9aa1ae" stroke-width="2" marker-end="url(#lbm-a)"/>
+    <line x1="286" y1="141" x2="364" y2="141" stroke="#9aa1ae" stroke-width="2" marker-end="url(#lbm-a)"/>
+    <rect x="370" y="6" width="460" height="158" rx="12" fill="#1e2128" stroke="#e7e9ee" stroke-width="2"/>
+    <text x="600" y="35" fill="#e7e9ee" font-size="20" font-weight="600" text-anchor="middle">large behavioural model</text>
+    <rect x="390" y="48" width="420" height="48" rx="9" fill="#15171c" stroke="#5ab0ff" stroke-width="2"/><text x="600" y="79" fill="#5ab0ff" font-size="18" font-weight="600" text-anchor="middle">pretrained vision-language backbone</text>
+    <rect x="390" y="106" width="420" height="48" rx="9" fill="#15171c" stroke="#f2b134" stroke-width="2"/><text x="600" y="137" fill="#f2b134" font-size="18" font-weight="600" text-anchor="middle">action head</text>
+    <line x1="836" y1="85" x2="914" y2="85" stroke="#9aa1ae" stroke-width="2" marker-end="url(#lbm-a)"/>
+    <rect x="920" y="16" width="260" height="138" rx="9" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/><text x="1050" y="46" fill="#e7e9ee" font-size="19" font-weight="600" text-anchor="middle">action chunk</text>
+    <path d="M940 112 C 980 62, 1022 138, 1064 92 S 1130 76, 1160 104" fill="none" stroke="#ff6b6b" stroke-width="3" stroke-linecap="round"/>
+    <path d="M940 90 C 982 124, 1030 68, 1076 114 S 1134 128, 1160 84" fill="none" stroke="#5fd38d" stroke-width="3" stroke-linecap="round"/>
+    <path d="M940 132 C 990 124, 1022 100, 1068 130 S 1124 108, 1160 126" fill="none" stroke="#b28dff" stroke-width="3" stroke-linecap="round"/>
+  </svg>
+  <div style="display:flex; justify-content:center; margin-top:14px">
+    <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/pi07-peel-poster.jpg" aria-label="Physical Intelligence π0.7: a prompt is typed and a two-armed robot peels a courgette" style="width:784px; height:441px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/pi07-peel.mp4" type="video/mp4"></video>
+  </div>
+  <p class="credit">video: Physical Intelligence, π0.7 (2026)</p>
+</section>
+
+<section>
+  <h2>How we train the models</h2>
+  <div class="pipeline">
+    <div><h3>1 · collect data</h3><div class="stage">
+      <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/lab-teleop-poster.jpg" aria-label="A person with VR controllers steering two robot arms that open a cardboard box" style="width:480px; height:270px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/lab-teleop.mp4" type="video/mp4"></video>
+    </div></div>
+    <div><h3>&nbsp;</h3><div class="stage arr">→</div></div>
+    <div><h3>2 · train</h3><div class="stage">
+      <svg viewBox="0 0 200 200" style="width:200px; display:block" font-family="Inter, Arial, sans-serif">
+        <rect x="3" y="3" width="194" height="194" rx="12" fill="#1e2128" stroke="#f2b134" stroke-width="2"/>
+        <text x="100" y="34" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">large behavioural</text><text x="100" y="54" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">model</text>
+        <path d="M38 76 V162 H178" fill="none" stroke="#9aa1ae" stroke-width="2"/>
+        <path d="M44 84 C 58 140, 92 152, 172 155" fill="none" stroke="#f2b134" stroke-width="3.5" stroke-linecap="round"/>
+        <text x="108" y="182" fill="#9aa1ae" font-size="13" text-anchor="middle">training time</text>
+        <text x="24" y="120" fill="#9aa1ae" font-size="13" text-anchor="middle" transform="rotate(-90 24 120)">error</text>
+      </svg>
+    </div></div>
+    <div><h3>&nbsp;</h3><div class="stage arr">→</div></div>
+    <div><h3>3 · deploy</h3><div class="stage">
+      <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/lab-polybags-poster.jpg" aria-label="Two robot arms in the lab handling a polybag on their own, seen from above" style="width:380px; height:238px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/lab-polybags.mp4" type="video/mp4"></video>
+      <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/lab-shoe-poster.jpg" aria-label="Two robot arms in the lab taking a shoe out of its box on their own, seen from above" style="width:380px; height:214px; display:block; border-radius:10px; margin-top:14px"><source src="../../assets/generalist-robot-policies/lab-shoe.mp4" type="video/mp4"></video>
+    </div></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 2</div>
+  <h1>Research</h1>
+</section>
+
+<section>
+  <h2 style="font-size:1.2em">The bet: deployment data is the internet-scale data of robotics</h2>
+  <div class="cols" style="grid-template-columns:auto 1fr; gap:1em; align-items:stretch; margin-top:0.4em">
+    <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/vla-in-production-poster.jpg" aria-label="A robot arm picking items out of a bin in a production cell" style="width:640px; height:400px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/vla-in-production.mp4" type="video/mp4"></video>
+    <div class="tiles side">
+      <div class="box tile"><div class="big">1M+</div><div><div class="what">real-robot trajectories across 22 robot embodiments</div><div class="src">Open X-Embodiment, 2023: pooled from many labs</div></div></div>
+      <div class="box tile"><div class="big">5M</div><div><div class="what">industrial robots operating worldwide</div><div class="src">International Federation of Robotics, operational stock in 2025</div></div></div>
+      <div class="box tile"><div class="big">200,000+</div><div><div class="what">hours of operation and over 1 billion images, recorded by a single company</div><div class="src">Ambi Robotics, January 2025</div></div></div>
+    </div>
+  </div>
+  <!-- the open questions appear on a click -->
+  <div class="fragment" style="margin-top:0.5em">
+    <h3 style="font-size:0.8em; margin:0 0 0.3em">Open questions: when is deployment data good training data?</h3>
+    <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5em; font-size:0.63em; line-height:1.3; align-items:stretch">
+      <div class="box numbox"><span class="n">1</span><span>Which <b>properties of controller-generated trajectories</b> explain how well large behavioural models perform and scale?</span></div>
+      <div class="box numbox"><span class="n">2</span><span>How much <b>teleoperation</b> can deployment data replace, on tasks seen and on tasks unseen in that data?</span></div>
+      <div class="box numbox"><span class="n">3</span><span>Which changes to <b>normalisation, sampling or the robot setup</b> explain and reduce the performance gaps?</span></div>
+      <div class="box numbox"><span class="n">4</span><span>Which <b>training recipe</b> uses deployment data best: direct imitation, staged training, targeted human correction, or a world model for planning?</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Work so far: a paper and the current project</h2>
+  <div class="cols" style="grid-template-columns:1.15fr 1fr; gap:1em; align-items:stretch; font-size:0.8em; margin-top:0.2em">
+    <div class="box key">
+      <span class="status">under review at ICLR 2027</span>
+      <h3 style="color:var(--accent)">Visual Instruction Channels for Generalist Robot Policies</h3>
+      <div style="display:flex; gap:12px; justify-content:center; margin-top:0.5em">
+        <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/paper-vic-scene-poster.jpg" aria-label="A robot arm picks from a bin the item that is marked in red" style="width:355px; height:300px; display:block; border-radius:8px"><source src="../../assets/generalist-robot-policies/paper-vic-scene.mp4" type="video/mp4"></video>
+        <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/paper-vic-wrist-poster.jpg" aria-label="The view of the camera on the gripper: the item to pick is marked in red" style="width:225px; height:300px; display:block; border-radius:8px"><source src="../../assets/generalist-robot-policies/paper-vic-wrist.mp4" type="video/mp4"></video>
+      </div>
+    </div>
+    <div class="box">
+      <span class="status next">being finished</span>
+      <h3>Production project: fine-tuning and data characteristics</h3>
+      <p style="margin:0.3em 0 0">What matters in the data when a large behavioural model is fine-tuned for production.</p>
+      <ul style="margin:0.4em 0 0 1.1em"><li><b>Blog post:</b> early December 2026</li><li><b>Paper submission:</b> January 2027</li></ul>
+    </div>
+  </div>
+  <svg viewBox="0 0 1200 160" style="width:1200px; max-width:100%; display:block; margin:0.6em auto 0" font-family="Inter, Arial, sans-serif">
+    <line x1="60" y1="80" x2="760" y2="80" stroke="#9aa1ae" stroke-width="3"/>
+    <line x1="760" y1="80" x2="1140" y2="80" stroke="#9aa1ae" stroke-width="3" stroke-dasharray="7 7"/>
+    <circle cx="150" cy="80" r="11" fill="#5fd38d"/>
+    <text x="150" y="48" fill="#e7e9ee" font-size="17" font-weight="600" text-anchor="middle">April 2026</text>
+    <text x="150" y="118" fill="#9aa1ae" font-size="16" text-anchor="middle">VLA in production</text>
+    <circle cx="520" cy="80" r="11" fill="#5fd38d"/>
+    <text x="520" y="48" fill="#e7e9ee" font-size="17" font-weight="600" text-anchor="middle">Autumn 2026</text>
+    <text x="520" y="118" fill="#9aa1ae" font-size="16" text-anchor="middle">ICLR 2027 submission,</text><text x="520" y="140" fill="#9aa1ae" font-size="16" text-anchor="middle">under review</text>
+    <line x1="760" y1="52" x2="760" y2="108" stroke="#f2b134" stroke-width="3"/>
+    <text x="760" y="40" fill="#f2b134" font-size="17" font-weight="600" text-anchor="middle">today</text>
+    <circle cx="900" cy="80" r="10" fill="#15171c" stroke="#f2b134" stroke-width="3"/>
+    <text x="900" y="48" fill="#e7e9ee" font-size="17" font-weight="600" text-anchor="middle">December 2026</text>
+    <text x="900" y="118" fill="#9aa1ae" font-size="16" text-anchor="middle">blog post</text>
+    <circle cx="1080" cy="80" r="10" fill="#15171c" stroke="#f2b134" stroke-width="3"/>
+    <text x="1080" y="48" fill="#e7e9ee" font-size="17" font-weight="600" text-anchor="middle">January 2027</text>
+    <text x="1080" y="118" fill="#9aa1ae" font-size="16" text-anchor="middle">paper submission</text>
+  </svg>
+</section>
+
+<section>
+  <h2>Outlook: pretraining on a large real deployment dataset</h2>
+  <div class="cols" style="grid-template-columns:auto 1fr; gap:1.4em; align-items:center; margin-top:0.2em">
+    <svg viewBox="0 0 580 470" style="width:560px; display:block" font-family="Inter, Arial, sans-serif">
+      <defs><marker id="fw-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f2b134"/></marker></defs>
+      <path d="M392.9 93.4 A175 175 0 0 1 460.5 195.6" fill="none" stroke="#f2b134" stroke-width="3" marker-end="url(#fw-a)"/>
+      <path d="M460.5 274.4 A175 175 0 0 1 392.9 376.6" fill="none" stroke="#f2b134" stroke-width="3" marker-end="url(#fw-a)"/>
+      <path d="M187.1 376.6 A175 175 0 0 1 119.5 274.4" fill="none" stroke="#f2b134" stroke-width="3" marker-end="url(#fw-a)"/>
+      <path d="M119.5 195.6 A175 175 0 0 1 187.1 93.4" fill="none" stroke="#f2b134" stroke-width="3" marker-end="url(#fw-a)"/>
+      <rect x="205" y="32" width="170" height="56" rx="9" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/>
+      <text x="290" y="56" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">robots doing</text><text x="290" y="76" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">useful work</text>
+      <rect x="380" y="207" width="170" height="56" rx="9" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/>
+      <text x="465" y="231" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">deployment</text><text x="465" y="251" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">data</text>
+      <rect x="205" y="382" width="170" height="56" rx="9" fill="#1e2128" stroke="#f2b134" stroke-width="2"/>
+      <text x="290" y="406" fill="#f2b134" font-size="16" font-weight="600" text-anchor="middle">pretraining a large</text><text x="290" y="426" fill="#f2b134" font-size="16" font-weight="600" text-anchor="middle">behavioural model</text>
+      <rect x="30" y="207" width="170" height="56" rx="9" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/>
+      <text x="115" y="231" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">better, more</text><text x="115" y="251" fill="#e7e9ee" font-size="16" font-weight="600" text-anchor="middle">general policies</text>
+      <text x="290" y="218" fill="#9aa1ae" font-size="15" text-anchor="middle">the data flywheel</text><text x="290" y="239" fill="#9aa1ae" font-size="15" text-anchor="middle">of an</text><text x="290" y="260" fill="#9aa1ae" font-size="15" text-anchor="middle">“internet of robotics”</text>
+    </svg>
+    <div style="font-size:0.74em; display:grid; gap:0.6em">
+      <p style="margin:0; color:var(--fg-dim)">Steps on the way:</p>
+      <div class="box numbox"><span class="n">1</span><span><b>Tasks seen in deployment data:</b> surpass the teleoperation-only baseline with deployment data, alone or mixed with teleoperation.</span></div>
+      <div class="box numbox"><span class="n">2</span><span><b>Tasks unseen in deployment data:</b> show that experience from other tasks gives an advantage on new ones.</span></div>
+      <div class="box numbox"><span class="n">3</span><span><b>Training recipes:</b> DAgger from a deployment-trained policy, data at mixed frequencies, world models for planning.</span></div>
+      <div class="takeaway" style="margin-top:0.2em"><b>The goal:</b> pretraining on a huge real deployment dataset.</div>
+    </div>
+  </div>
+</section>
+
+<!-- outlook, continued: world action models, an architecture that could use recorded transitions more fully -->
+<section>
+  <h2 style="font-size:1.2em">World Action Models: an emerging approach supporting the bet</h2>
+  <div data-widget="imagine" data-config='{"model":"designed","width":1230}' style="margin:0.4em auto 0"></div>
+</section>
+
+<section>
+  <h2 style="font-size:1.2em">World Action Models: an emerging approach supporting the bet</h2>
+  <div data-widget="imagine" data-config='{"model":"learned","width":1230}' style="margin:0.4em auto 0"></div>
+</section>
+
+<section>
+  <h2 style="font-size:1.2em">World Action Models: an emerging approach supporting the bet</h2>
+  <div style="width:1240px; margin:0.2em auto 0">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:19px; text-align:center">
+      <h3 style="margin:0 0 0.3em">recorded</h3>
+      <h3 style="margin:0 0 0.3em; color:var(--green)">predicted</h3>
+    </div>
+    <!-- both halves are one video file, so that they stay in step -->
+    <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/wam-recorded-vs-predicted-poster.jpg" aria-label="Three camera views of two robot arms handling a polybag: the recording on the left, the world model's prediction on the right" style="width:1240px; height:519px; display:block; border-radius:8px"><source src="../../assets/generalist-robot-policies/wam-recorded-vs-predicted.mp4" type="video/mp4"></video>
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<section class="section-slide">
+  <div class="num">Part 3</div>
+  <h1>Teaching and other activities</h1>
+</section>
+
+<section>
+  <h2>Teaching: interactive lecture materials</h2>
+  <div class="cols" style="grid-template-columns:1.1fr 1fr; gap:1.2em; align-items:start; font-size:0.8em; margin-top:0.4em">
+    <div>
+      <div class="box"><h3>Deep Neural Networks, 2026/27</h3>Lecture 5: flow matching</div>
+      <div class="box" style="margin-top:0.6em"><h3>Robot Control, 2026/27</h3>Lecture 4: 3D scene reconstruction and SLAM<br>Lecture 5: PID control and simulation engines</div>
+    </div>
+    <div class="box key">
+      <h3 style="color:var(--accent)">From lecture to publication</h3>
+      <p style="margin:0 0 0.6em">Expository material of this kind can be published, for example in <b>SIAM Review</b>.</p>
+      <div class="path" style="font-size:0.86em">
+        <div class="stop">flow matching<br>lecture</div><span class="arr">→</span>
+        <div class="stop key">ICLR blog post<br><span class="dim" style="font-size:0.85em">deadline 1 December</span></div><span class="arr">→</span>
+        <div class="stop">SIAM Review</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- the opening animation of the flow matching lecture (Deep Neural Networks, lecture 5: "The goal and general idea"), without its captions -->
+<section>
+  <h2>Flow matching: the general idea <span class="src-tag">Deep Neural Networks · lecture 5</span></h2>
+  <div style="display:grid; grid-template-columns:auto auto; gap:12px 21px; justify-content:center; margin-top:0.2em">
+    <div data-widget="gauss1d" data-config='{"width":600,"height":210,"controls":"overlay","t":0,"print_t":1}'></div>
+    <div data-widget="melt" data-config='{"panel":"ice","width":600,"height":210,"controls":"overlay","t":0,"print_t":0.6}'></div>
+    <div data-widget="melt" data-config='{"panel":"density","width":1000,"height":340,"samples":200,"controls":"overlay","t":0,"print_t":0.6}' style="grid-column:1 / -1; justify-self:center; width:1000px"></div>
+  </div>
+</section>
+
+<!-- reused from Deep Neural Networks, lecture 5 (ml-teaching: dnn/slides/lectures/05-flow-matching), lines 515-532 -->
+<section>
+  <h2>π0: actions are generated in chunks <span class="src-tag">Deep Neural Networks · lecture 5</span></h2>
+  <div class="cols" style="grid-template-columns:1fr auto; gap:1.4em; align-items:center">
+    <div style="display:flex; align-items:stretch; justify-content:center; gap:0.4em; min-height:420px">
+      <div style="align-self:center" class="box"><span style="font-family:var(--mono); font-size:0.85em; white-space:nowrap">Flow Matching</span></div>
+      <svg viewBox="0 0 24 340" preserveAspectRatio="none" style="width:24px; flex:none"><path d="M 20 4 Q 10 4 10 24 L 10 150 Q 10 170 2 170 Q 10 170 10 190 L 10 316 Q 10 336 20 336" fill="none" stroke="#9aa1ae" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+      <div class="pichain" style="display:flex; flex-direction:column; justify-content:space-between; align-items:center; font-size:0.9em; padding:0.2em 0.4em">
+        <div data-pi="0">$\textcolor{#5ab0ff}{\mathbf A_t^0} \sim \mathcal N(\mathbf 0, \mathbf I)$</div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div data-pi="tau">$\textcolor{#5fd38d}{\mathbf A_t^\tau}$ <span class="dim" data-tau style="display:inline-block; min-width:5.2em; font-size:0.8em; text-align:left"></span></div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div data-pi="1">$\textcolor{#ff6b6b}{\mathbf A_t^1} \sim p_1$</div>
+      </div>
+    </div>
+    <div data-widget="chunkflow" data-config='{"n":10,"episodes":[[-1,1],[1,1]],"width":540,"height":500}'></div>
+  </div>
+  <aside class="notes">Proposal 2: an exact illustration computed in the browser instead of the recording. The gripper has to get from the start to the box past two obstacles; the demonstrations go around each on the left or on the right. The task takes four chunks of 50 positions. The policy infers a chunk from the current observation (here the gripper position and the stage of the task), the robot executes it open loop, and only then the next inference starts, from where the gripper is now. Each inference is the lecture's flow: A^0 ~ N(0, I), 10 Euler steps of the marginal flow of the conditional OT paths (computed from the demonstrations that fit the observation, not a trained network), ending in A^1 ~ p_1. The chain on the left lights up during an inference and goes dark while the robot executes. The first inference is slow, the others fast. Two episodes with different choices: left then right (an S-curve), then right and right. The choice at the first obstacle is made in the first chunk, the choice at the second obstacle in the third; once the gripper is on one side, the observation rules out the other, so the chunks stay consistent. No chunk ever goes through an obstacle, which an average of the two ways would.</aside>
+</section>
+
+<!-- reused from Deep Neural Networks, lecture 5 (ml-teaching: dnn/slides/lectures/05-flow-matching), lines 534-550 -->
+<section>
+  <h2>π0: how it looks on a real robot <span class="src-tag">Deep Neural Networks · lecture 5</span></h2>
+  <div class="cols" style="grid-template-columns:1fr auto; gap:1.4em; align-items:center">
+    <div style="display:flex; align-items:stretch; justify-content:center; gap:0.4em; min-height:420px">
+      <div style="align-self:center" class="box"><span style="font-family:var(--mono); font-size:0.85em; white-space:nowrap">Flow Matching</span></div>
+      <svg viewBox="0 0 24 340" preserveAspectRatio="none" style="width:24px; flex:none"><path d="M 20 4 Q 10 4 10 24 L 10 150 Q 10 170 2 170 Q 10 170 10 190 L 10 316 Q 10 336 20 336" fill="none" stroke="#9aa1ae" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+      <div style="display:flex; flex-direction:column; justify-content:space-between; align-items:center; font-size:0.9em; padding:0.2em 0.4em">
+        <div>$\textcolor{#5ab0ff}{\mathbf A_t^0} \sim \mathcal N(\mathbf 0, \mathbf I)$</div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div>$\textcolor{#5fd38d}{\mathbf A_t^\tau}$</div>
+        <div class="dim">↓</div><div class="dim">⋯</div><div class="dim">↓</div>
+        <div>$\textcolor{#ff6b6b}{\mathbf A_t^1} \sim p_1$</div>
+      </div>
+    </div>
+    <video data-autoplay loop muted playsinline preload="auto" poster="../../assets/generalist-robot-policies/pi0-robot-poster.jpg" style="width:560px; display:block; border-radius:10px"><source src="../../assets/generalist-robot-policies/pi0-robot.mp4" type="video/mp4"></video>
+  </div>
+</section>
+
+<!-- reused from Deep Neural Networks, lecture 5 (ml-teaching: dnn/slides/lectures/05-flow-matching), lines 104-118 -->
+<section>
+  <h2>Deforming probability <span class="src-tag">Deep Neural Networks · lecture 5</span></h2>
+  <div class="cols" style="grid-template-columns:1fr 1.1fr; align-items:center; gap:1em">
+    <div>
+      <div data-widget="jacdet" data-config='{"width":560,"height":370,"tau":0,"print_tau":1,"loop":true}'></div>
+      <p class="small" style="margin:0.3em 0 0">$\mathbb P[X \in A] = \mathbb P[Y \in \varphi(A)]$: the mass moves with the map. Arrows: the two sides of $A$ after the map, i.e. the columns of the Jacobian $D\varphi$ times the side length (for small $A$). The area they span, relative to $A$, is the local area change $|\det D\varphi|$.</p>
+    </div>
+    <div style="font-size:0.85em">
+      <p style="margin:0">Consider an invertible map between random variables: $$Y = \varphi(X)$$</p>
+      <p style="margin:0.4em 0 0">Probabilities have to stay the same: $$\mathbb P[Y \in B] = \mathbb P[X \in A] \;\Longrightarrow\; \int_B p_Y(y)\,dy = \int_A p_X(x)\,dx$$</p>
+      <p style="margin:0.4em 0 0">Substitute $x = \varphi^{-1}(y)$ on the right: $$\int_A p_X(x)\,dx = \int_B p_X\big(\varphi^{-1}(y)\big)\,\big|\det D\varphi^{-1}(y)\big|\,dy$$</p>
+      <div class="box key" style="margin-top:0.5em">$$p_Y(y) = p_X\big(\varphi^{-1}(y)\big)\;\big|\det D\varphi^{-1}(y)\big|$$</div>
+    </div>
+  </div>
+</section>
+
+<!-- reused from Robot Control, lecture 4 (robot-control-teaching-materials: slides/lectures/04-3d-scene-reconstruction-and-slam), lines 91-103 -->
+<section>
+  <h2>3D scene reconstruction <span class="src-tag">Robot Control · lecture 4</span></h2>
+  <div data-widget="sfm3d" data-config='{"width":640,"height":340,"imageWidth":300,"noise":2.5,"perturb":2.5,"pnpPoints":6,"baEvery":3,"glide":1.2}'></div>
+  <div style="font-size:0.62em; margin-top:0.3em">
+    <p style="margin:0">Toy reconstruction of a house from photos.</p>
+    <ul style="margin:0.1em 0 0 1.1em">
+      <li><b>(lecture 3)</b> We start from one pair,</li>
+      <li><b>(lecture 2)</b> Then register one camera at a time with PnP and triangulate the points the new camera sees,</li>
+      <li><b>(today)</b> after every few images we adjust <b>everything</b> so that all reprojections agree: <b>bundle adjustment</b>.</li>
+    </ul>
+    <p style="margin:0"></p>The residuals (red) in the current image show the error that is minimised.</p>
+  </div>
+</section>
+
+<!-- reused from Robot Control, lecture 4 (robot-control-teaching-materials: slides/lectures/04-3d-scene-reconstruction-and-slam), lines 620-624 -->
+<section>
+  <h2>SLAM to play with <span class="src-tag">Robot Control · lecture 4</span></h2>
+  <div data-widget="slam2d" data-config='{"width":620,"height":380,"graph":true}'></div>
+  <p style="font-size:0.66em; margin-top:0.3em">The whole graph is re-optimised at every step. Watch the ellipses: the pose uncertainty grows along the lap, the landmarks inherit it, and when the first landmarks are seen again the loop closes: everything moves and the ellipses collapse.</p>
+</section>
+
+<!-- reused from Robot Control, lecture 5 (robot-control-teaching-materials: slides/lectures/05-pid-control-and-simulation-engines), lines 180-184 -->
+<section>
+  <h2>A controller: the general idea <span class="src-tag">Robot Control · lecture 5</span></h2>
+  <svg viewBox="0 0 840 142" style="width:1000px; display:block; margin:0.2em auto 0" font-family="Inter, Arial, sans-serif"><defs><marker id="ar12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa1ae"/></marker></defs><rect x="20" y="30" width="150" height="44" rx="7" fill="#1e2128" stroke="#5fd38d" stroke-width="2"/><text x="95.0" y="57.0" fill="#e7e9ee" font-size="13" text-anchor="middle">commanded variable</text><text x="95.0" y="92" fill="#5fd38d" font-size="12" text-anchor="middle">desired altitude H</text><rect x="200" y="30" width="90" height="44" rx="7" fill="#1e2128" stroke="#f2b134" stroke-width="2"/><text x="245.0" y="57.0" fill="#e7e9ee" font-size="13" text-anchor="middle" font-weight="600">error</text><text x="245.0" y="92" fill="#f2b134" font-size="12" text-anchor="middle">e = H − z</text><rect x="350" y="30" width="130" height="44" rx="7" fill="#1e2128" stroke="#5ab0ff" stroke-width="2"/><text x="415.0" y="57.0" fill="#e7e9ee" font-size="13" text-anchor="middle">controller</text><text x="415.0" y="92" fill="#5ab0ff" font-size="12" text-anchor="middle">PID → thrust F</text><rect x="510" y="30" width="130" height="44" rx="7" fill="#1e2128" stroke="#e7e9ee" stroke-width="2"/><text x="575.0" y="57.0" fill="#e7e9ee" font-size="13" text-anchor="middle">plant</text><text x="575.0" y="92" fill="#e7e9ee" font-size="12" text-anchor="middle">the drone</text><rect x="670" y="30" width="150" height="44" rx="7" fill="#1e2128" stroke="#b28dff" stroke-width="2"/><text x="745.0" y="57.0" fill="#e7e9ee" font-size="13" text-anchor="middle">controlled variable</text><text x="745.0" y="92" fill="#b28dff" font-size="12" text-anchor="middle">current altitude z</text><line x1="170" y1="52.0" x2="198" y2="52.0" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#ar12)"/><line x1="290" y1="52.0" x2="348" y2="52.0" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#ar12)"/><line x1="480" y1="52.0" x2="508" y2="52.0" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#ar12)"/><line x1="640" y1="52.0" x2="668" y2="52.0" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#ar12)"/><path d="M 745.0 98 L 745.0 126 L 245.0 126 L 245.0 102" fill="none" stroke="#9aa1ae" stroke-width="1.6" marker-end="url(#ar12)"/><rect x="455" y="114" width="80" height="24" rx="6" fill="#1e2128" stroke="#3a3f4b" stroke-width="1.5"/><text x="495" y="130" fill="#9aa1ae" font-size="12" text-anchor="middle">feedback</text></svg>
+  <div style="display:flex; justify-content:center; margin-top:0.6em"><div data-widget="piddrone" data-config='{"mode":"PID","width":1000,"height":300,"controls":"none","loop":true,"tmax":12,"speed":1.5,"labels":true}'></div></div>
+</section>
+
+<section>
+  <h2>The lab has grown</h2>
+  <div class="cols" style="grid-template-columns:1fr auto 1.75fr; gap:0.8em; align-items:stretch; margin-top:0.3em">
+    <div class="box grow">
+      <h3>2024</h3>
+      <div class="grow-row"><span class="big">2</span><span class="lbl">people</span>
+        <svg viewBox="0 0 80 44"><g fill="#9aa1ae"><circle cx="16" cy="12" r="8"/><path d="M2 42 a14 16 0 0 1 28 0 z"/><circle cx="52" cy="12" r="8"/><path d="M38 42 a14 16 0 0 1 28 0 z"/></g></svg></div>
+      <div class="grow-row"><span class="big">0</span><span class="lbl">robot stations</span><span></span></div>
+    </div>
+    <div style="align-self:center; font-size:2em; color:var(--fg-dim)">→</div>
+    <div class="box key grow">
+      <h3 style="color:var(--accent)">Today</h3>
+      <div class="grow-row"><span class="big">10+</span><span class="lbl">people</span>
+        <svg viewBox="0 0 372 44"><g fill="#e7e9ee"><circle cx="16" cy="12" r="8"/><path d="M2 42 a14 16 0 0 1 28 0 z"/><circle cx="52" cy="12" r="8"/><path d="M38 42 a14 16 0 0 1 28 0 z"/><circle cx="88" cy="12" r="8"/><path d="M74 42 a14 16 0 0 1 28 0 z"/><circle cx="124" cy="12" r="8"/><path d="M110 42 a14 16 0 0 1 28 0 z"/><circle cx="160" cy="12" r="8"/><path d="M146 42 a14 16 0 0 1 28 0 z"/><circle cx="196" cy="12" r="8"/><path d="M182 42 a14 16 0 0 1 28 0 z"/><circle cx="232" cy="12" r="8"/><path d="M218 42 a14 16 0 0 1 28 0 z"/><circle cx="268" cy="12" r="8"/><path d="M254 42 a14 16 0 0 1 28 0 z"/><circle cx="304" cy="12" r="8"/><path d="M290 42 a14 16 0 0 1 28 0 z"/><circle cx="340" cy="12" r="8"/><path d="M326 42 a14 16 0 0 1 28 0 z"/></g></svg></div>
+      <div class="grow-row"><span class="big">7</span><span class="lbl">robot stations<br><span style="font-size:0.85em">3 more planned this academic year</span></span>
+        <svg viewBox="0 0 372 44"><g fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><g stroke="#f2b134"><path d="M2 42 h22 M13 42 V31 L22 13 L33 20 V29"/><circle cx="13" cy="31" r="2.2"/><circle cx="22" cy="13" r="2.2"/><path d="M39 42 h22 M50 42 V31 L59 13 L70 20 V29"/><circle cx="50" cy="31" r="2.2"/><circle cx="59" cy="13" r="2.2"/><path d="M76 42 h22 M87 42 V31 L96 13 L107 20 V29"/><circle cx="87" cy="31" r="2.2"/><circle cx="96" cy="13" r="2.2"/><path d="M113 42 h22 M124 42 V31 L133 13 L144 20 V29"/><circle cx="124" cy="31" r="2.2"/><circle cx="133" cy="13" r="2.2"/><path d="M150 42 h22 M161 42 V31 L170 13 L181 20 V29"/><circle cx="161" cy="31" r="2.2"/><circle cx="170" cy="13" r="2.2"/><path d="M187 42 h22 M198 42 V31 L207 13 L218 20 V29"/><circle cx="198" cy="31" r="2.2"/><circle cx="207" cy="13" r="2.2"/><path d="M224 42 h22 M235 42 V31 L244 13 L255 20 V29"/><circle cx="235" cy="31" r="2.2"/><circle cx="244" cy="13" r="2.2"/></g><g stroke="#9aa1ae" stroke-dasharray="2 5"><path d="M261 42 h22 M272 42 V31 L281 13 L292 20 V29"/><circle cx="272" cy="31" r="2.2"/><circle cx="281" cy="13" r="2.2"/><path d="M298 42 h22 M309 42 V31 L318 13 L329 20 V29"/><circle cx="309" cy="31" r="2.2"/><circle cx="318" cy="13" r="2.2"/><path d="M335 42 h22 M346 42 V31 L355 13 L366 20 V29"/><circle cx="346" cy="31" r="2.2"/><circle cx="355" cy="13" r="2.2"/></g></g></svg></div>
+    </div>
+  </div>
+  <div class="photos" style="margin-top:0.7em">
+    <figure><img src="../../assets/generalist-robot-policies/lab-75.jpg" alt="Two Trossen robot arms above a table with a cardboard box, seen from a top camera" style="height:250px; object-fit:cover"><figcaption>bimanual box folding</figcaption></figure>
+    <figure><img src="../../assets/generalist-robot-policies/lab-83.jpg" alt="Two Trossen robot arms sorting blue 3D-printed blocks into a bin" style="height:250px; object-fit:cover"><figcaption>sorting blocks</figcaption></figure>
+    <figure><img src="../../assets/generalist-robot-policies/lab-84.jpg" alt="Robot arms and a UR arm over a grey bin on a bench" style="height:250px; object-fit:cover"><figcaption>bin picking</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Summary</h2>
+  <ul style="margin-top:0.6em">
+    <li><b>Large behavioural models:</b> one policy for many tasks. Flow matching generates chunks of actions; world action models learn the model of the world from data.</li>
+    <li><b>The bet:</b> deployment data is the internet-scale data of robotics.</li>
+    <li><b>So far:</b> a VLA deployed in production, a paper under review at ICLR 2027, and a fine-tuning study heading for a January submission.</li>
+    <li><b>Next:</b> pretraining on a large real deployment dataset.</li>
+    <li><b>Teaching:</b> interactive lecture materials on their way to publication, and a lab that grew from 2 to 10+ people and 7 robot stations.</li>
+  </ul>
+  <p style="margin-top:1.4em; font-size:1.3em; color:var(--fg)">Thank you.</p>
+</section>
+
+</div></div>
+<script type="module" src="../../shared/deck.js"></script>
+</body>
+</html>
