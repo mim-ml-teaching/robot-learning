@@ -1,0 +1,10 @@
+:root { color-scheme: light dark; font: 100%/1.55 system-ui, sans-serif; }
+body { margin: 0; }
+main { max-width: 26rem; margin: 12vh auto 0; padding: 1.5rem; }
+a { color: inherit; text-underline-offset: .18em; }
+h1 { margin: 2rem 0 1rem; font-size: 2rem; line-height: 1.2; }
+label { display: block; margin-bottom: .35rem; }
+input, button { box-sizing: border-box; font: inherit; padding: .55em .8em; }
+input { width: 100%; }
+button { margin-top: 1rem; cursor: pointer; }
+:focus-visible { outline: 3px solid #638bf6; outline-offset: 3px; }

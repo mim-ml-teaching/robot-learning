@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>Generalist Robot Policies · Robot Learning</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../../shared/protected-page.css">
+</head>
+<body>
+  <main>
+    <a href="../../">Robot Learning slides</a>
+    <h1>Generalist Robot Policies</h1>
+    <form>
+      <label for="password">Talk password</label>
+      <input type="password" id="password" required autocomplete="current-password"
+             autocapitalize="none" spellcheck="false" aria-describedby="status">
+      <button type="submit" disabled>Open slides</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+    <noscript>Enable JavaScript to decrypt the slides in your browser.</noscript>
+  </main>
+  <script type="module">
+    import { showHTML, unlockForm } from '../../shared/protected-page.js';
+
+    function prepareSlides(text) {
+      const bundle = JSON.parse(text);
+      let html = bundle.html;
+      for (const {url, type, base64} of bundle.assets) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < bytes.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blobURL = URL.createObjectURL(new Blob([bytes], {type}));
+        html = html.replaceAll(url, blobURL);
+      }
+      // Reveal's speaker window opens two same-origin copies of this deck.
+      // Their media URLs belong to the presenter tab and last only while it is open.
+      window.unlockedTalkHTML = html;
+      return html;
+    }
+
+    function speakerCopy() {
+      if (window === parent || !new URLSearchParams(location.search).has('receiver')) return;
+      try {
+        const presenter = parent.opener;
+        if (presenter?.location.pathname === location.pathname) return presenter.unlockedTalkHTML;
+      } catch {
+        // An unrelated embedding page cannot read the presenter's deck.
+      }
+    }
+
+    const slides = speakerCopy();
+    if (slides) {
+      setTimeout(() => showHTML(slides), 0);
+    } else {
+      unlockForm('./deck.bin', prepareSlides);
+    }
+  </script>
+</body>
+</html>

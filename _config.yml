@@ -1,0 +1,11 @@
+title: Robot Learning
+description: Robot learning at the Faculty of Mathematics, Informatics and Mechanics, University of Warsaw.
+
+# The minima bundled with GitHub Pages (2.5) has no dark skin, so load minima 3 at a pinned commit.
+remote_theme: jekyll/minima@4de322363fca5927e6f4012cb94f6dad69ab5e6c
+plugins:
+  - jekyll-remote-theme
+minima:
+  skin: dark
+
+timezone: Europe/Warsaw
